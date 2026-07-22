@@ -1,0 +1,20 @@
+# Google Apps Script files (not needed for Vercel frontend)
+*.gs
+appsscript.json
+
+# Dependencies
+node_modules/
+package-lock.json
+package.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.log
+readAuditReport.js
