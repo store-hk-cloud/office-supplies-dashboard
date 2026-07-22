@@ -1,0 +1,16 @@
+{
+  "name": "office-supplies-dashboard",
+  "version": "2.0.0",
+  "description": "Office Supplies Management System — Vercel + Supabase",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel deploy --prod"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "devDependencies": {
+    "vercel": "^34.0.0"
+  }
+}

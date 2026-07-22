@@ -1,11 +1,11 @@
-# Google Apps Script files (not needed for Vercel frontend)
+# Google Apps Script files (legacy — no longer used)
 *.gs
 appsscript.json
+Index.html
 
 # Dependencies
 node_modules/
 package-lock.json
-package.json
 
 # IDE
 .vscode/
@@ -18,3 +18,11 @@ Thumbs.db
 # Temp files
 *.log
 readAuditReport.js
+
+# GAS-specific files
+style.html
+javascript.html
+checkFolder.gs
+checkFolders.gs
+FIXES_v2.4.md
+SYSTEM_DESIGN.md
