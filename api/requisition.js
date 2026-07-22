@@ -135,7 +135,8 @@ async function approveRequest(supabase, d, res) {
   await supabase.from('transactions').insert(transRows);
   await recalcBudgetForDept(supabase, items[0].department);
 
-  return res.json({ success: true, message: `อนุมัติคำขอ ${requestId} (${items.length} รายการ) เรียบร้อย` });
+  const totalPrice = Math.round(items.reduce((s, it) => s + toNum(it.total_price), 0) * 100) / 100;
+  return res.json({ success: true, message: `อนุมัติคำขอ ${requestId} (${items.length} รายการ) เรียบร้อย`, requesterEmail: items[0].requester_email, totalPrice });
 }
 
 // ═══════════════════════════════════════
