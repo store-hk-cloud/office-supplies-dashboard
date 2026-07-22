@@ -212,7 +212,7 @@ function callApi(fn, args, cb, errCb) {
   showLoading(true);
   fetch(APP.GAS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ action: fn, args: args || [] })
   })
   .then(function(r) { return r.json(); })
