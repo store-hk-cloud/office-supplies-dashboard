@@ -8,7 +8,9 @@
     "deploy": "vercel deploy --prod"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0"
+    "@supabase/supabase-js": "^2.45.0",
+    "papaparse": "^5.5.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "vercel": "^34.0.0"
