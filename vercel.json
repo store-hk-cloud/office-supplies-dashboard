@@ -2,7 +2,8 @@
   "rewrites": [
     { "source": "/manifest.json", "destination": "/public/manifest.json" },
     { "source": "/sw.js", "destination": "/public/sw.js" },
-    { "source": "/((?!manifest\\.json|sw\\.js|api).*)", "destination": "/index.html" }
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
     "api/**/*.js": {
