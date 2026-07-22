@@ -50,8 +50,8 @@ CREATE TABLE IF NOT EXISTS requests (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_requests_status ON requests(status);
-CREATE INDEX idx_requests_requester ON requests(requester_email);
+CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
+CREATE INDEX IF NOT EXISTS idx_requests_requester ON requests(requester_email);
 
 -- ========================================================================
 -- TRANSACTIONS TABLE (รายการที่อนุมัติแล้ว → ใช้กับ Dashboard)
