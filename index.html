@@ -8,6 +8,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config={theme:{extend:{fontFamily:{sarabun:['Sarabun','Segoe UI','Tahoma','sans-serif']}}}}</script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}body{font-family:'Sarabun',sans-serif;background:#f0f2f5;color:#1a1f36;min-height:100vh}
@@ -159,6 +160,10 @@
 </main></div>
 
 <script>
+var SUPABASE_URL='https://orgjpruiiyrjapezzwgp.supabase.co';
+var SUPABASE_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9yZ2pwcnVpaXlyamFwZXp3emdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3MTQ4NTQsImV4cCI6MjEwMDI5MDg1NH0.00Mp5FZrW65XFIwudMKacV6pTaLJl17uBR__ArNtmqQ';
+var SB = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON) : null;
+
 var APP={CURRENT_PAGE:'login',CHART_TRENDS:null,CHART_BAR:null,CHART_DOUGHNUT:null,CHART_LINE:null,USER:null};
 
 document.addEventListener('DOMContentLoaded',function(){
