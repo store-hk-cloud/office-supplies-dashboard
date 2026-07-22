@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ========================================================================
 -- USERS TABLE
 -- ========================================================================
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   email VARCHAR(255) UNIQUE NOT NULL,
   name VARCHAR(255) NOT NULL,
@@ -23,12 +23,13 @@ CREATE TABLE users (
 INSERT INTO users (email, name, role, department) VALUES
   ('admin@hillkoff.com', 'ผู้ดูแลระบบ', 'admin', 'ผู้บริหาร'),
   ('somchai@hillkoff.com', 'สมชาย ใจดี', 'requester', 'ฝ่ายไอที'),
-  ('manager@hillkoff.com', 'สมหญิง รักดี', 'approver', 'ผู้บริหาร');
+  ('manager@hillkoff.com', 'สมหญิง รักดี', 'approver', 'ผู้บริหาร')
+ON CONFLICT (email) DO NOTHING;
 
 -- ========================================================================
 -- REQUESTS TABLE (คำขอเบิก)
 -- ========================================================================
-CREATE TABLE requests (
+CREATE TABLE IF NOT EXISTS requests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   request_id VARCHAR(50) UNIQUE NOT NULL,
   requester_email VARCHAR(255) REFERENCES users(email),
@@ -55,7 +56,7 @@ CREATE INDEX idx_requests_requester ON requests(requester_email);
 -- ========================================================================
 -- TRANSACTIONS TABLE (รายการที่อนุมัติแล้ว → ใช้กับ Dashboard)
 -- ========================================================================
-CREATE TABLE transactions (
+CREATE TABLE IF NOT EXISTS transactions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   transaction_id VARCHAR(50) UNIQUE NOT NULL,
   request_id VARCHAR(50) REFERENCES requests(request_id),
@@ -72,14 +73,14 @@ CREATE TABLE transactions (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_transactions_date ON transactions(date);
-CREATE INDEX idx_transactions_department ON transactions(department);
-CREATE INDEX idx_transactions_category ON transactions(category);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_department ON transactions(department);
+CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
 
 -- ========================================================================
 -- BUDGETS TABLE (งบประมาณรายเดือน/แผนก)
 -- ========================================================================
-CREATE TABLE budgets (
+CREATE TABLE IF NOT EXISTS budgets (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   department VARCHAR(255) NOT NULL,
   month VARCHAR(7) NOT NULL, -- YYYY-MM
@@ -94,7 +95,7 @@ CREATE TABLE budgets (
 -- ========================================================================
 -- INVENTORY TABLE (สินค้าคงคลัง)
 -- ========================================================================
-CREATE TABLE inventory (
+CREATE TABLE IF NOT EXISTS inventory (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   item_id VARCHAR(50) UNIQUE NOT NULL,
   item VARCHAR(255) NOT NULL,
@@ -111,7 +112,7 @@ CREATE TABLE inventory (
 -- ========================================================================
 -- SUPPLIERS TABLE
 -- ========================================================================
-CREATE TABLE suppliers (
+CREATE TABLE IF NOT EXISTS suppliers (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   supplier_id VARCHAR(50) UNIQUE NOT NULL,
   name VARCHAR(255) NOT NULL,
@@ -125,7 +126,7 @@ CREATE TABLE suppliers (
 -- ========================================================================
 -- ASSETS TABLE (ทะเบียนทรัพย์สิน)
 -- ========================================================================
-CREATE TABLE assets (
+CREATE TABLE IF NOT EXISTS assets (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   asset_id VARCHAR(50) UNIQUE NOT NULL,
   name VARCHAR(255) NOT NULL,
@@ -145,7 +146,7 @@ CREATE TABLE assets (
 -- ========================================================================
 -- LOGS TABLE (บันทึกกิจกรรม)
 -- ========================================================================
-CREATE TABLE logs (
+CREATE TABLE IF NOT EXISTS logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   timestamp TIMESTAMPTZ DEFAULT NOW(),
   user_email VARCHAR(255),
@@ -157,7 +158,7 @@ CREATE TABLE logs (
 -- ========================================================================
 -- IMPORT LOG TABLE (บันทึกการนำเข้าข้อมูล)
 -- ========================================================================
-CREATE TABLE import_logs (
+CREATE TABLE IF NOT EXISTS import_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   file_name VARCHAR(255),
   total_rows INT DEFAULT 0,
