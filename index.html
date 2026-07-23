@@ -12,10 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="Office Supplies">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a73e8'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='36' fill='white'%3E📊%3C/text%3E%3C/svg%3E">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>tailwind.config={theme:{extend:{fontFamily:{sarabun:['Sarabun','Segoe UI','Tahoma','sans-serif']}}}}</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -86,7 +83,7 @@ tr:hover td{background:var(--bg-hover)}
 @media(max-width:768px){.sidebar{transform:translateX(-100%);width:260px;position:fixed;height:100vh;overflow-y:auto}.sidebar.open{transform:translateX(0)}.mobile-toggle{display:block}.main-content{margin-left:0;padding-top:48px}.form-row{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)!important}}
 </style>
 </head>
-<body class="font-sarabun">
+<body>
 <div id="loadingOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:var(--overlay-bg);z-index:9999;justify-content:center;align-items:center;flex-direction:column;gap:12px">
 <div style="width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite"></div>
 <span style="font-weight:600;color:var(--text-secondary)">กำลังโหลด...</span>
@@ -367,8 +364,7 @@ tr:hover td{background:var(--bg-hover)}
 // ═══════════════════════════════════════
 var SUPABASE_URL='https://orgjpruiiyrjapezzwgp.supabase.co';
 var SUPABASE_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9yZ2pwcnVpaXlyamFwZXp3emdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3MTQ4NTQsImV4cCI6MjEwMDI5MDg1NH0.00Mp5FZrW65XFIwudMKacV6pTaLJl17uBR__ArNtmqQ';
-var SB=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON):null;
-var APP={CURRENT_PAGE:'login',CHART_TRENDS:null,CHART_BAR:null,CHART_DOUGHNUT:null,USER:null,cartRows:1,invRows:1,deferredPrompt:null};
+var APP={CURRENT_PAGE:'login',CHART_TRENDS:null,CHART_BAR:null,CHART_DOUGHNUT:null,USER:null,SESSION:null,cartRows:1,invRows:1,deferredPrompt:null};
 
 // ═══════════════════════════════════════
 // INIT
@@ -378,13 +374,8 @@ document.addEventListener('DOMContentLoaded',function(){
   APP.CURRENT_PAGE=p.get('page')||'login';
   var saved=localStorage.getItem('app_user');
   if(saved){try{APP.USER=JSON.parse(saved);APP.CURRENT_PAGE='landing'}catch(e){}}
-
-  // Auto-demo mode: if no saved user, check Supabase and auto-login as demo
-  if(!saved){
-    isSupabaseReachable().then(function(ok){
-       if(!ok){document.getElementById('offlineBanner').style.display='block'}
-    });
-  }
+  var savedSession=localStorage.getItem('app_session');
+  if(savedSession){try{APP.SESSION=JSON.parse(savedSession)}catch(e){localStorage.removeItem('app_session')}}
 
   initApp();
   addCartRow();
@@ -477,12 +468,8 @@ function postApi(url, body, cb, errCb) {
   showLoading(true);
   var payload = JSON.stringify(body || {});
   var request={method:'POST',headers:{'Content-Type':'application/json'},body:payload};
-  var requestWithAuth=SB&&SB.auth&&SB.auth.getSession?SB.auth.getSession().then(function(sessionResult){
-    var session=sessionResult&&sessionResult.data&&sessionResult.data.session;
-    if(session&&session.access_token)request.headers.Authorization='Bearer '+session.access_token;
-    return request;
-  }):Promise.resolve(request);
-  requestWithAuth.then(function(options){return xr(null)(url,options)})
+  if(APP.SESSION&&APP.SESSION.access_token)request.headers.Authorization='Bearer '+APP.SESSION.access_token;
+  Promise.resolve(request).then(function(options){return xr(null)(url,options)})
     .then(function(resp) {
       if (!resp.ok) { throw new Error('HTTP ' + resp.status); }
       return resp.json();
@@ -559,10 +546,6 @@ function renderSidebar(){
   }
 }
 
-function isSupabaseReachable(){
-  return fetch(SUPABASE_URL+'/rest/v1/',{method:'HEAD'}).then(function(){return true}).catch(function(){return false});
-}
-
 function checkLowStock(){
   postApi('/api/inventory',{action:'low_stock'},function(r){
     var b=document.getElementById('lowStockBadge');
@@ -577,7 +560,17 @@ function checkLowStock(){
 function doLogin(){
   var e=document.getElementById('loginEmail').value,p=document.getElementById('loginPassword').value;
   if(!e||!p){showToast('⚠️ กรุณากรอกอีเมลและรหัสผ่าน','warning');return}
-  if(SB){SB.auth.signInWithPassword({email:e,password:p}).then(function(r){
+  postApi('/api/auth',{action:'login',email:e,password:p},function(r){
+    if(r.success&&r.user){
+      APP.SESSION=r.session||null;
+      if(APP.SESSION)localStorage.setItem('app_session',JSON.stringify(APP.SESSION));
+      APP.USER=r.user;APP.USER.isAuthenticated=true;
+      localStorage.setItem('app_user',JSON.stringify(APP.USER));
+      showToast('เข้าสู่ระบบสำเร็จ '+APP.USER.name,'success');initApp();navigateTo('landing');checkLowStock();
+    } else showToast('❌ '+(r.error||'เข้าสู่ระบบไม่สำเร็จ'),'error');
+  });
+  return;
+  if(false){
     if(r.error){showToast('❌ '+r.error.message,'error');return}
      postApi('/api/auth',{action:'me'},function(profile){
        if(!profile.success){showToast('❌ '+(profile.error||'ไม่พบข้อมูลผู้ใช้'),'error');return}
@@ -604,15 +597,16 @@ function doRegister(){
    });
 }
 
-function doLogout(){if(SB)SB.auth.signOut();APP.USER=null;localStorage.removeItem('app_user');navigateTo('login');initApp()}
+function doLogout(){APP.USER=null;APP.SESSION=null;localStorage.removeItem('app_user');localStorage.removeItem('app_session');navigateTo('login');initApp()}
 function skipLogin(){
   APP.USER={email:'demo@hillkoff.com',name:'Demo User',role:'viewer',department:'ผู้บริหาร',isActive:true,isAuthenticated:true,isDemo:true};
   localStorage.setItem('app_user',JSON.stringify(APP.USER));
   initApp();navigateTo('landing');
   // Check Supabase connectivity
-  isSupabaseReachable().then(function(ok){
+  return;
+  if(false){
     if(!ok)showToast('⚠️ ฐานข้อมูลไม่พร้อมใช้งาน — ฟีเจอร์บางอย่างไม่สามารถใช้ได้','warning');
-  });
+   }
 }
 function showRegister(){document.getElementById('registerForm').style.display='block'}
 

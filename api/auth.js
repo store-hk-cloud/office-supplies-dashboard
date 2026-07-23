@@ -16,6 +16,7 @@ module.exports = async function handler(req, res) {
         if (loginErr) return res.json({ success: false, error: loginErr.message });
         const admin = getSupabaseAdmin();
         const { data: userData } = await admin.from('users').select('*').eq('email', email).single();
+        if (!userData || userData.is_active === false) return res.json({ success: false, error: 'บัญชีผู้ใช้ยังไม่พร้อมใช้งาน' });
         return res.json({ success: true, user: userData || null, session: loginData.session });
       }
 
