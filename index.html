@@ -458,23 +458,35 @@ function installPWA(){
 // ═══════════════════════════════════════
 // API HELPERS
 // ═══════════════════════════════════════
-function postApi(url,body,cb,errCb){
+// ═══════════════════════════════════════
+// xr — flexible fetch wrapper (injectable requestor)
+//   xr(null)  → native fetch
+//   xr(myFunc) → custom requestor
+// ═══════════════════════════════════════
+var xr = function(e) {
+  return e
+    ? function() { return e.apply(null, arguments) }
+    : function() { return fetch.apply(null, arguments) };
+};
+
+function postApi(url, body, cb, errCb) {
   showLoading(true);
-  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})})
-    .then(function(resp){
-      if(!resp.ok){throw new Error('HTTP '+resp.status+' '+resp.statusText)}
-      return resp.json()
+  var payload = JSON.stringify(body || {});
+  xr(null)(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload })
+    .then(function(resp) {
+      if (!resp.ok) { throw new Error('HTTP ' + resp.status); }
+      return resp.json();
     })
-    .then(function(r){showLoading(false);if(cb)cb(r)})
-    .catch(function(e){
+    .then(function(r) { showLoading(false); if (cb) cb(r); })
+    .catch(function(e) {
       showLoading(false);
-      var msg=e.message||'';
-      if(msg.includes('NetworkError')||msg.includes('Failed to fetch')||msg.includes('ERR_NAME_NOT_RESOLVED')){
-        showToast('⚠️ ไม่สามารถเชื่อมต่อฐานข้อมูล — อาจต้องเปิดใช้ Supabase Project ใหม่','warning');
-      }else{
-        showToast('❌ '+msg,'error');
+      var msg = (e || {}).message || '';
+      if (msg.includes('NetworkError') || msg.includes('Failed to fetch') || msg.includes('ERR_NAME_NOT_RESOLVED')) {
+        showToast('⚠️ ไม่สามารถเชื่อมต่อฐานข้อมูล — อาจต้องเปิดใช้ Supabase Project ใหม่', 'warning');
+      } else {
+        showToast('❌ ' + msg, 'error');
       }
-      if(errCb)errCb(e);
+      if (errCb) errCb(e);
     });
 }
 
