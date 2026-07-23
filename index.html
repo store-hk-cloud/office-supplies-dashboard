@@ -6,6 +6,7 @@
 <title>Office Supplies v5.2</title>
 <meta name="description" content="ระบบเบิก-อนุมัติ วัสดุสำนักงาน — Enterprise v5.2">
 <meta name="theme-color" content="#1a73e8">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Office Supplies">
@@ -460,8 +461,21 @@ function installPWA(){
 function postApi(url,body,cb,errCb){
   showLoading(true);
   fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})})
-    .then(r=>r.json()).then(r=>{showLoading(false);if(cb)cb(r)})
-    .catch(e=>{showLoading(false);showToast('❌ Network Error','error');if(errCb)errCb(e)});
+    .then(function(resp){
+      if(!resp.ok){throw new Error('HTTP '+resp.status+' '+resp.statusText)}
+      return resp.json()
+    })
+    .then(function(r){showLoading(false);if(cb)cb(r)})
+    .catch(function(e){
+      showLoading(false);
+      var msg=e.message||'';
+      if(msg.includes('NetworkError')||msg.includes('Failed to fetch')||msg.includes('ERR_NAME_NOT_RESOLVED')){
+        showToast('⚠️ ไม่สามารถเชื่อมต่อฐานข้อมูล — อาจต้องเปิดใช้ Supabase Project ใหม่','warning');
+      }else{
+        showToast('❌ '+msg,'error');
+      }
+      if(errCb)errCb(e);
+    });
 }
 
 function showLoading(s){var e=document.getElementById('loadingOverlay');if(e)e.style.display=s?'flex':'none'}
@@ -523,6 +537,10 @@ function renderSidebar(){
   }
 }
 
+function isSupabaseReachable(){
+  return fetch(SUPABASE_URL+'/rest/v1/',{method:'HEAD'}).then(function(){return true}).catch(function(){return false});
+}
+
 function checkLowStock(){
   postApi('/api/inventory',{action:'low_stock'},function(r){
     var b=document.getElementById('lowStockBadge');
@@ -568,7 +586,15 @@ function doRegister(){
 }
 
 function doLogout(){if(SB)SB.auth.signOut();APP.USER=null;localStorage.removeItem('app_user');navigateTo('login');initApp()}
-function skipLogin(){APP.USER={email:'demo@hillkoff.com',name:'Demo User',role:'admin',department:'ผู้บริหาร',isActive:true,isAuthenticated:true};localStorage.setItem('app_user',JSON.stringify(APP.USER));initApp();navigateTo('landing')}
+function skipLogin(){
+  APP.USER={email:'demo@hillkoff.com',name:'Demo User',role:'admin',department:'ผู้บริหาร',isActive:true,isAuthenticated:true};
+  localStorage.setItem('app_user',JSON.stringify(APP.USER));
+  initApp();navigateTo('landing');
+  // Check Supabase connectivity
+  isSupabaseReachable().then(function(ok){
+    if(!ok)showToast('⚠️ ฐานข้อมูลไม่พร้อมใช้งาน — ฟีเจอร์บางอย่างไม่สามารถใช้ได้','warning');
+  });
+}
 function showRegister(){document.getElementById('registerForm').style.display='block'}
 
 // ═══════════════════════════════════════
