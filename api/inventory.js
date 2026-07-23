@@ -2,11 +2,15 @@
 // API: /api/inventory — Inventory + Suppliers + Assets
 // ═══════════════════════════════════════
 const { getSupabaseAdmin, generateId, toNum } = require('../lib/supabase');
+const { requireAuth } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+  const { action } = req.body || {};
+  const auth = await requireAuth(req, res, action === 'low_stock' ? undefined : ['admin']);
+  if (!auth) return;
   const supabase = getSupabaseAdmin();
-  const { action, data } = req.body || {};
+  const { data } = req.body || {};
 
   try {
     switch (action) {

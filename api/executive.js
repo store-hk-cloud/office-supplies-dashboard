@@ -1,10 +1,13 @@
 // ═══════════════════════════════════════
 // API: /api/executive — Executive KPI Dashboard
 // ═══════════════════════════════════════
-const { getSupabase, toNum } = require('../lib/supabase');
+const { getSupabaseAdmin, toNum } = require('../lib/supabase');
+const { requireAuth } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
-  const supabase = getSupabase();
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
+  const supabase = getSupabaseAdmin();
   const { action, year } = req.body || {};
   const targetYear = year || new Date().getFullYear();
 
@@ -140,7 +143,7 @@ async function getAlerts(supabase, res) {
 
   const [budgets, lowStock, pendingOld] = await Promise.all([
     supabase.from('budgets').select('*').eq('month', currentMonth),
-    supabase.from('inventory').select('*').lte('stock_qty', supabase.raw ? undefined : 0), // simplified
+    supabase.from('inventory').select('stock_qty,min_stock'),
     supabase.from('requests').select('*').eq('status', 'pending').lte('created_at', new Date(now - 3 * 86400000).toISOString())
   ]);
 
@@ -151,8 +154,9 @@ async function getAlerts(supabase, res) {
     else if (toNum(b.usage_percent) >= 80) alerts.push({ type: 'budget_warning', department: b.department, percent: toNum(b.usage_percent), message: `งบประมาณ ${b.department} ใช้ไป ${toNum(b.usage_percent)}%` });
   });
 
-  if ((lowStock.data || []).length > 0) {
-    alerts.push({ type: 'low_stock', count: lowStock.data.length, message: `มี ${lowStock.data.length} รายการที่สต็อกต่ำ` });
+  const lowStockItems = (lowStock.data || []).filter(item => toNum(item.stock_qty) <= toNum(item.min_stock || 5));
+  if (lowStockItems.length > 0) {
+    alerts.push({ type: 'low_stock', count: lowStockItems.length, message: `มี ${lowStockItems.length} รายการที่สต็อกต่ำ` });
   }
 
   if ((pendingOld.data || []).length > 0) {

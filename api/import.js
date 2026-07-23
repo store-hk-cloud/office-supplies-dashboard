@@ -1,11 +1,14 @@
 // ═══════════════════════════════════════
 // API: /api/import — File Upload + Parse Excel/CSV
 // ═══════════════════════════════════════
-const { getSupabase, generateId, toNum } = require('../lib/supabase');
+const { getSupabaseAdmin, generateId, toNum } = require('../lib/supabase');
+const { requireAuth } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-  const supabase = getSupabase();
+  const auth = await requireAuth(req, res, ['approver', 'admin']);
+  if (!auth) return;
+  const supabase = getSupabaseAdmin();
   const { action } = req.body || {};
 
   try {
@@ -30,7 +33,7 @@ async function importFile(supabase, body, res) {
     const { data: existing } = await supabase.from('transactions').select('id').eq('item', row.item).eq('department', row.department).eq('date', row.date).limit(1);
     if (existing && existing.length > 0) { skipped++; continue; }
 
-    await supabase.from('transactions').insert({
+    const { error: insertError } = await supabase.from('transactions').insert({
       transaction_id: generateId('TRN'),
       request_id: 'IMPORT-' + (fileName || 'upload'),
       date: row.date || (monthKey ? monthKey + '-01' : new Date().toISOString().slice(0, 10)),
@@ -44,6 +47,7 @@ async function importFile(supabase, body, res) {
       approved_by: 'Import',
       approval_date: new Date().toISOString().slice(0, 10)
     });
+    if (insertError) return res.status(500).json({ success: false, error: insertError.message, imported, skipped });
     imported++;
   }
 

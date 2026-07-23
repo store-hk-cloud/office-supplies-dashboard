@@ -3,21 +3,26 @@
 // Gracefully handles missing tables (table-not-found → fallback)
 // ═══════════════════════════════════════
 const { getSupabaseAdmin, generateId, toNum } = require('../lib/supabase');
+const { requireAuth } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
+    const { action } = req.body || {};
+    const roles = action === 'send_alert' || action === 'check_budget_alerts' ? ['approver', 'admin'] : undefined;
+    const auth = await requireAuth(req, res, roles);
+    if (!auth) return;
     const supabase = getSupabaseAdmin();
-    const { action, data } = req.body || {};
+    const { data } = req.body || {};
 
     switch (action) {
       case 'send_alert': return await sendAlert(supabase, data, res);
-      case 'send_approval_notification': return await sendApprovalNotification(supabase, data, res);
+      case 'send_approval_notification': return await sendApprovalNotification(supabase, data, res, auth.profile);
       case 'check_budget_alerts': return await checkBudgetAlerts(supabase, res);
-      case 'save_template': return await saveTemplate(supabase, data, res);
-      case 'get_templates': return await getTemplates(supabase, data, res);
-      case 'delete_template': return await deleteTemplate(supabase, data, res);
+      case 'save_template': return await saveTemplate(supabase, data, res, auth.profile);
+      case 'get_templates': return await getTemplates(supabase, res, auth.profile);
+      case 'delete_template': return await deleteTemplate(supabase, data, res, auth.profile);
       case 'get_template': return await getTemplate(supabase, data, res);
       default: return res.json({ success: false, error: `Unknown action: ${action}` });
     }
@@ -56,7 +61,7 @@ async function sendAlert(supabase, d, res) {
           to: [to], subject: subject,
           html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
             <h2 style="color:#1a73e8">📊 Office Supplies Management</h2>
-            <div style="background:#f8f9fa;padding:16px;border-radius:8px;margin:16px 0">${message.replace(/\n/g, '<br>')}</div>
+            <div style="background:#f8f9fa;padding:16px;border-radius:8px;margin:16px 0">${escapeHtml(message).replace(/\n/g, '<br>')}</div>
             <p style="color:#5f6368;font-size:12px">อีเมลอัตโนมัติจากระบบ Office Supplies — กรุณาอย่าตอบกลับ</p>
           </div>`
         })
@@ -71,8 +76,17 @@ async function sendAlert(supabase, d, res) {
   return res.json({ success: true, message: 'บันทึกการแจ้งเตือนแล้ว (log-only)', emailSent: false });
 }
 
-async function sendApprovalNotification(supabase, d, res) {
-  const { requestId, requesterEmail, approverEmail, status, totalPrice } = d || {};
+async function sendApprovalNotification(supabase, d, res, profile) {
+  const { requestId, status } = d || {};
+  if (!requestId || !status) return res.json({ success: false, error: 'Missing requestId/status' });
+  const { data: requests, error } = await supabase.from('requests').select('requester_email,approver_email,requester_name,total_price').eq('request_id', requestId);
+  if (error || !requests || requests.length === 0) return res.json({ success: false, error: 'ไม่พบคำขอ' });
+  const request = requests[0];
+  const requesterEmail = request.requester_email;
+  const approverEmail = request.approver_email;
+  const totalPrice = requests.reduce((sum, row) => sum + toNum(row.total_price), 0);
+  if (status === 'pending' && profile.email !== requesterEmail) return res.status(403).json({ success: false, error: 'Insufficient permissions' });
+  if (['approved', 'rejected'].includes(status) && !['approver', 'admin'].includes(profile.role)) return res.status(403).json({ success: false, error: 'Insufficient permissions' });
   if (requesterEmail && status) {
     const thaiStatus = status === 'approved' ? 'อนุมัติแล้ว ✅' : status === 'rejected' ? 'ปฏิเสธ ❌' : status;
     await sendAlert(supabase, {
@@ -107,7 +121,7 @@ async function checkBudgetAlerts(supabase, res) {
 // ═══════════════════════════════════════
 // TEMPLATES (บันทึกคำขอที่ใช้บ่อย)
 // ═══════════════════════════════════════
-async function saveTemplate(supabase, d, res) {
+async function saveTemplate(supabase, d, res, profile) {
   const { name, items, department, approverEmail, reason } = d || {};
   if (!name || !items || items.length === 0) return res.json({ success: false, error: 'กรุณาระบุชื่อและรายการ' });
   try {
@@ -115,7 +129,7 @@ async function saveTemplate(supabase, d, res) {
     const { error } = await supabase.from('request_templates').insert({
       template_id: templateId, name, department: department || '',
       approver_email: approverEmail || '', reason: reason || '',
-      items: JSON.stringify(items), created_by: d.createdBy || '', usage_count: 0
+      items: JSON.stringify(items), created_by: profile.email, usage_count: 0
     });
     if (error) return res.json({ success: false, error: error.message });
     return res.json({ success: true, templateId, message: 'บันทึกเทมเพลตเรียบร้อย' });
@@ -125,9 +139,9 @@ async function saveTemplate(supabase, d, res) {
   }
 }
 
-async function getTemplates(supabase, d, res) {
+async function getTemplates(supabase, res, profile) {
   try {
-    const dept = d?.department || '';
+    const dept = profile.department || '';
     let query = supabase.from('request_templates').select('*');
     if (dept) query = query.or(`department.eq.${dept},department.eq.''`);
     const { data, error } = await query.order('usage_count', { ascending: false });
@@ -151,13 +165,19 @@ async function getTemplate(supabase, d, res) {
   } catch (e) { return res.json({ success: false, error: e.message }); }
 }
 
-async function deleteTemplate(supabase, d, res) {
+async function deleteTemplate(supabase, d, res, profile) {
   const { templateId } = d || {};
   if (!templateId) return res.json({ success: false, error: 'Missing templateId' });
   try {
-    await supabase.from('request_templates').delete().eq('template_id', templateId);
+    let query = supabase.from('request_templates').delete().eq('template_id', templateId);
+    if (profile.role !== 'admin') query = query.eq('created_by', profile.email);
+    const { error } = await query;
+    if (error) throw error;
     return res.json({ success: true, message: 'ลบเทมเพลตเรียบร้อย' });
   } catch (e) { return res.json({ success: false, error: e.message }); }
 }
 
 function formatCurrencyLocal(v) { if (v === null || v === undefined || isNaN(v)) return '฿0.00'; return '฿' + Number(v).toLocaleString('th-TH', { minimumFractionDigits: 2 }); }
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}

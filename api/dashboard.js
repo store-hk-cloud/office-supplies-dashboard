@@ -1,12 +1,14 @@
 // ═══════════════════════════════════════
 // API: /api/dashboard — Dashboard data
 // ═══════════════════════════════════════
-const { getSupabase, toNum } = require('../lib/supabase');
+const { getSupabaseAdmin, toNum } = require('../lib/supabase');
+const { requireAuth } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
-  const supabase = getSupabase();
-  const { action } = req.query || {};
-  const { monthKey } = req.body || {};
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
+  const supabase = getSupabaseAdmin();
+  const action = req.query?.action || req.body?.action;
 
   try {
     switch (action) {
@@ -85,10 +87,11 @@ async function getBudgetGauges(supabase, res) {
 async function searchTransactions(supabase, body, res) {
   const { query } = body || {};
   if (!query) return res.json({ success: true, data: [] });
+  const safeQuery = String(query).replace(/[^a-zA-Z0-9ก-๙ _.-]/g, ' ');
 
   const { data, error } = await supabase.from('transactions')
     .select('*')
-    .or(`item.ilike.%${query}%,category.ilike.%${query}%,department.ilike.%${query}%`);
+    .or(`item.ilike.%${safeQuery}%,category.ilike.%${safeQuery}%,department.ilike.%${safeQuery}%`);
 
   if (error) throw error;
   return res.json({ success: true, data: data || [] });

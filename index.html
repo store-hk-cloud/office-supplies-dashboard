@@ -382,17 +382,13 @@ document.addEventListener('DOMContentLoaded',function(){
   // Auto-demo mode: if no saved user, check Supabase and auto-login as demo
   if(!saved){
     isSupabaseReachable().then(function(ok){
-      if(!ok){
-        // Supabase is down — auto-enter demo mode
-        skipLogin();
-        document.getElementById('offlineBanner').style.display='block';
-      }
+       if(!ok){document.getElementById('offlineBanner').style.display='block'}
     });
   }
 
   initApp();
   addCartRow();
-  checkLowStock();
+   if(APP.USER&&APP.USER.isAuthenticated)checkLowStock();
   initTheme();
   initPWA();
   initDropZone();
@@ -480,7 +476,13 @@ let xr = e => e ? (...t) => e(...t) : (...e) => fetch(...e);
 function postApi(url, body, cb, errCb) {
   showLoading(true);
   var payload = JSON.stringify(body || {});
-  xr(null)(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload })
+  var request={method:'POST',headers:{'Content-Type':'application/json'},body:payload};
+  var requestWithAuth=SB&&SB.auth&&SB.auth.getSession?SB.auth.getSession().then(function(sessionResult){
+    var session=sessionResult&&sessionResult.data&&sessionResult.data.session;
+    if(session&&session.access_token)request.headers.Authorization='Bearer '+session.access_token;
+    return request;
+  }):Promise.resolve(request);
+  requestWithAuth.then(function(options){return xr(null)(url,options)})
     .then(function(resp) {
       if (!resp.ok) { throw new Error('HTTP ' + resp.status); }
       return resp.json();
@@ -577,13 +579,13 @@ function doLogin(){
   if(!e||!p){showToast('⚠️ กรุณากรอกอีเมลและรหัสผ่าน','warning');return}
   if(SB){SB.auth.signInWithPassword({email:e,password:p}).then(function(r){
     if(r.error){showToast('❌ '+r.error.message,'error');return}
-    SB.from('users').select('*').eq('email',e).single().then(function(u){
-      APP.USER=u.data||{email:e,name:e,role:'requester',department:'ไม่ระบุ'};
-      APP.USER.isAuthenticated=true;
-      localStorage.setItem('app_user',JSON.stringify(APP.USER));
-      showToast('✅ ยินดีต้อนรับ '+APP.USER.name,'success');
-      initApp();navigateTo('landing');checkLowStock();
-    });
+     postApi('/api/auth',{action:'me'},function(profile){
+       if(!profile.success){showToast('❌ '+(profile.error||'ไม่พบข้อมูลผู้ใช้'),'error');return}
+       APP.USER=profile.user;APP.USER.isAuthenticated=true;
+       localStorage.setItem('app_user',JSON.stringify(APP.USER));
+       showToast('✅ ยินดีต้อนรับ '+APP.USER.name,'success');
+       initApp();navigateTo('landing');checkLowStock();
+     });
   });return}
   postApi('/api/auth',{action:'login',email:e,password:p},function(r){
     if(r.success){APP.USER=r.user;APP.USER.isAuthenticated=true;
@@ -596,18 +598,15 @@ function doLogin(){
 function doRegister(){
   var e=document.getElementById('regEmail').value,n=document.getElementById('regName').value,p=document.getElementById('regPassword').value;
   if(!e||!p){showToast('⚠️ กรุณากรอกข้อมูลให้ครบ','warning');return}
-  if(SB){SB.auth.signUp({email:e,password:p,options:{data:{name:n}}}).then(function(r){
-    if(r.error){showToast('❌ '+r.error.message,'error');return}
-    SB.from('users').insert({email:e,name:n||e,role:'requester',department:'ไม่ระบุ',is_active:true}).then(function(){
-      showToast('✅ สมัครสมาชิกสำเร็จ!','success');
-      document.getElementById('registerForm').style.display='none'
-    });
-  });return}
+   postApi('/api/auth',{action:'register',email:e,password:p,name:n,department:'ไม่ระบุ'},function(r){
+     if(r.success){showToast('✅ สมัครสมาชิกสำเร็จ!','success');document.getElementById('registerForm').style.display='none'}
+     else showToast('❌ '+(r.error||''),'error');
+   });
 }
 
 function doLogout(){if(SB)SB.auth.signOut();APP.USER=null;localStorage.removeItem('app_user');navigateTo('login');initApp()}
 function skipLogin(){
-  APP.USER={email:'demo@hillkoff.com',name:'Demo User',role:'admin',department:'ผู้บริหาร',isActive:true,isAuthenticated:true};
+  APP.USER={email:'demo@hillkoff.com',name:'Demo User',role:'viewer',department:'ผู้บริหาร',isActive:true,isAuthenticated:true,isDemo:true};
   localStorage.setItem('app_user',JSON.stringify(APP.USER));
   initApp();navigateTo('landing');
   // Check Supabase connectivity

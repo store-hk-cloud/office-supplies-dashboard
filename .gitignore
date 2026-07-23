@@ -5,7 +5,6 @@ Index.html
 
 # Dependencies
 node_modules/
-package-lock.json
 
 # IDE
 .vscode/
@@ -26,3 +25,4 @@ checkFolder.gs
 checkFolders.gs
 FIXES_v2.4.md
 SYSTEM_DESIGN.md
+.vercel

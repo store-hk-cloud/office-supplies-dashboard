@@ -2,24 +2,30 @@
 // API: /api/requisition — Multi-item Request + Bulk Approve + Budget
 // ═══════════════════════════════════════
 const { getSupabaseAdmin, generateId, toNum } = require('../lib/supabase');
+const { requireAuth } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-  const supabase = getSupabaseAdmin();
   const { action, data } = req.body || {};
+  const adminActions = new Set(['get_users', 'add_user', 'get_budgets', 'set_budget', 'system_stats', 'get_inventory', 'add_inventory', 'add_inventory_batch']);
+  const approverActions = new Set(['get_pending', 'approve', 'reject', 'bulk_approve']);
+  const roles = adminActions.has(action) ? ['admin'] : approverActions.has(action) ? ['approver', 'admin'] : ['requester', 'approver', 'admin'];
+  const auth = await requireAuth(req, res, roles);
+  if (!auth) return;
+  const supabase = getSupabaseAdmin();
 
   try {
     switch (action) {
       // ── CREATE (multi-item) ──
-      case 'create_request': return await createRequest(supabase, data, res);
+      case 'create_request': return await createRequest(supabase, data, res, auth.profile);
       // ── READ ──
-      case 'get_my_requests': return await getMyRequests(supabase, data, res);
+      case 'get_my_requests': return await getMyRequests(supabase, res, auth.profile);
       case 'get_pending': return await getPendingRequests(supabase, res);
       // ── APPROVE / REJECT / CANCEL ──
-      case 'approve': return await approveRequest(supabase, data, res);
-      case 'reject': return await rejectRequest(supabase, data, res);
-      case 'cancel': return await cancelRequest(supabase, data, res);
-      case 'bulk_approve': return await bulkApprove(supabase, data, res);
+      case 'approve': return await approveRequest(supabase, data, res, auth.profile);
+      case 'reject': return await rejectRequest(supabase, data, res, auth.profile);
+      case 'cancel': return await cancelRequest(supabase, data, res, auth.profile);
+      case 'bulk_approve': return await bulkApprove(supabase, data, res, auth.profile);
       // ── CATEGORIES / ITEMS ──
       case 'get_categories': return await getCategories(supabase, res);
       case 'get_items': return await getItemsByCategory(supabase, data, res);
@@ -29,7 +35,7 @@ module.exports = async function handler(req, res) {
       // ── BUDGETS ──
       case 'get_budgets': return await getBudgets(supabase, res);
       case 'set_budget': return await setBudget(supabase, data, res);
-      case 'get_department_budget': return await getDeptBudget(supabase, data, res);
+      case 'get_department_budget': return await getDeptBudget(supabase, res, auth.profile);
       // ── SYSTEM ──
       case 'system_stats': return await getSystemStats(supabase, res);
       // ── INVENTORY ──
@@ -46,7 +52,7 @@ module.exports = async function handler(req, res) {
 // ═══════════════════════════════════════
 // CREATE REQUEST (multi-item support)
 // ═══════════════════════════════════════
-async function createRequest(supabase, d, res) {
+async function createRequest(supabase, d, res, profile) {
   const items = d.items || (d.item ? [{ item: d.item, category: d.category, quantity: d.quantity, unitPrice: d.unitPrice }] : []);
   if (items.length === 0) return res.json({ success: false, error: 'กรุณาระบุอย่างน้อย 1 รายการ' });
 
@@ -62,9 +68,9 @@ async function createRequest(supabase, d, res) {
     totalPrice += tp;
     rows.push({
       request_id: requestId,
-      requester_email: d.requesterEmail || 'anonymous@hillkoff.com',
-      requester_name: d.requesterName || 'ผู้ใช้ทั่วไป',
-      department: d.department || 'ไม่ระบุ',
+      requester_email: profile.email,
+      requester_name: profile.name || profile.email,
+      department: profile.department || 'ไม่ระบุ',
       item: it.item,
       category: it.category || 'ไม่ระบุ',
       quantity: qty,
@@ -86,8 +92,8 @@ async function createRequest(supabase, d, res) {
 // ═══════════════════════════════════════
 // GET MY REQUESTS (grouped by request_id)
 // ═══════════════════════════════════════
-async function getMyRequests(supabase, d, res) {
-  const email = d?.requesterEmail || 'anonymous@hillkoff.com';
+async function getMyRequests(supabase, res, profile) {
+  const email = profile.email;
   const { data, error } = await supabase.from('requests').select('*').eq('requester_email', email).order('created_at', { ascending: false });
   if (error) throw error;
   const grouped = groupRequests(data || []);
@@ -107,8 +113,9 @@ async function getPendingRequests(supabase, res) {
 // ═══════════════════════════════════════
 // APPROVE (single request_id → multiple transactions)
 // ═══════════════════════════════════════
-async function approveRequest(supabase, d, res) {
-  const { requestId, approverEmail, approverComment } = d || {};
+async function approveRequest(supabase, d, res, profile) {
+  const { requestId, approverComment } = d || {};
+  const approverEmail = profile.email;
   if (!requestId) return res.json({ success: false, error: 'กรุณาระบุ Request ID' });
 
   const { data: items, error: findErr } = await supabase.from('requests').select('*').eq('request_id', requestId);
@@ -142,8 +149,9 @@ async function approveRequest(supabase, d, res) {
 // ═══════════════════════════════════════
 // BULK APPROVE
 // ═══════════════════════════════════════
-async function bulkApprove(supabase, d, res) {
-  const { requestIds, approverEmail } = d || {};
+async function bulkApprove(supabase, d, res, profile) {
+  const { requestIds } = d || {};
+  const approverEmail = profile.email;
   if (!requestIds || !Array.isArray(requestIds) || requestIds.length === 0) return res.json({ success: false, error: 'กรุณาระบุ Request IDs' });
 
   let totalItems = 0;
@@ -169,16 +177,23 @@ async function bulkApprove(supabase, d, res) {
 // ═══════════════════════════════════════
 // REJECT / CANCEL (affects all rows of a request_id)
 // ═══════════════════════════════════════
-async function rejectRequest(supabase, d, res) {
+async function rejectRequest(supabase, d, res, profile) {
   const { requestId, comment } = d || {};
   if (!requestId) return res.json({ success: false, error: 'กรุณาระบุ Request ID' });
-  await supabase.from('requests').update({ status: 'rejected', approver_comment: comment || 'ปฏิเสธ', approval_date: new Date().toISOString().slice(0, 10) }).eq('request_id', requestId);
+  await supabase.from('requests').update({ status: 'rejected', approver_email: profile.email, approver_comment: comment || 'ปฏิเสธ', approval_date: new Date().toISOString().slice(0, 10) }).eq('request_id', requestId);
   return res.json({ success: true, message: `ปฏิเสธคำขอ ${requestId} เรียบร้อย` });
 }
-async function cancelRequest(supabase, d, res) {
+async function cancelRequest(supabase, d, res, profile) {
   const { requestId } = d || {};
   if (!requestId) return res.json({ success: false, error: 'กรุณาระบุ Request ID' });
-  await supabase.from('requests').update({ status: 'cancelled' }).eq('request_id', requestId);
+  const { data: rows, error: findError } = await supabase.from('requests').select('requester_email,status').eq('request_id', requestId);
+  if (findError || !rows || rows.length === 0) return res.json({ success: false, error: 'ไม่พบคำขอ' });
+  if (!['admin', 'approver'].includes(profile.role) && rows.some(row => row.requester_email !== profile.email)) {
+    return res.status(403).json({ success: false, error: 'Insufficient permissions' });
+  }
+  if (rows.some(row => row.status !== 'pending')) return res.json({ success: false, error: 'คำขอนี้ดำเนินการแล้ว' });
+  const { error } = await supabase.from('requests').update({ status: 'cancelled' }).eq('request_id', requestId);
+  if (error) throw error;
   return res.json({ success: true, message: `ยกเลิกคำขอ ${requestId} เรียบร้อย` });
 }
 
@@ -199,8 +214,8 @@ async function recalcBudgetForDept(supabase, department) {
     }
   } catch(e) { /* silent */ }
 }
-async function getDeptBudget(supabase, d, res) {
-  const dept = d?.department || '';
+async function getDeptBudget(supabase, res, profile) {
+  const dept = profile.department || '';
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const { data } = await supabase.from('budgets').select('*').eq('department', dept).eq('month', currentMonth);

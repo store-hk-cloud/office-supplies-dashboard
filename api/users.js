@@ -1,10 +1,13 @@
 // ═══════════════════════════════════════
 // API: /api/users — User Management (Admin)
 // ═══════════════════════════════════════
-const { getSupabaseAdmin } = require('../lib/supabase');
+const { getSupabase, getSupabaseAdmin } = require('../lib/supabase');
+const { requireAuth } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+  const auth = await requireAuth(req, res, ['admin']);
+  if (!auth) return;
   const supabase = getSupabaseAdmin();
   const { action, email, name, role, department, updates } = req.body || {};
 
@@ -40,12 +43,11 @@ module.exports = async function handler(req, res) {
       }
       case 'reset_password': {
         if (!email) return res.json({ success: false, error: 'กรุณาระบุ email' });
-        const { data: userData } = await supabase.from('users').select('id').eq('email', email).single();
-        if (!userData) return res.json({ success: false, error: 'ไม่พบผู้ใช้' });
-        const newPassword = Math.random().toString(36).slice(-8);
-        const { error } = await supabase.auth.admin.updateUserById(userData.id, { password: newPassword });
+        const { error } = await getSupabase().auth.resetPasswordForEmail(email, {
+          redirectTo: process.env.APP_URL || 'https://office-supplies-dashboard.vercel.app'
+        });
         if (error) return res.json({ success: false, error: error.message });
-        return res.json({ success: true, newPassword, message: `รีเซ็ตรหัสผ่านเป็น: ${newPassword}` });
+        return res.json({ success: true, message: 'ส่งลิงก์รีเซ็ตรหัสผ่านไปยังอีเมลแล้ว' });
       }
       default:
         return res.json({ success: false, error: `Unknown action: ${action}` });
