@@ -579,7 +579,7 @@ function doLogin(){
        showToast('✅ ยินดีต้อนรับ '+APP.USER.name,'success');
        initApp();navigateTo('landing');checkLowStock();
      });
-  });return}
+  return;}
   postApi('/api/auth',{action:'login',email:e,password:p},function(r){
     if(r.success){APP.USER=r.user;APP.USER.isAuthenticated=true;
       localStorage.setItem('app_user',JSON.stringify(APP.USER));
