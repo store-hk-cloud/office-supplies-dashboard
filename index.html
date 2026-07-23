@@ -93,6 +93,11 @@ tr:hover td{background:var(--bg-hover)}
 </div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 <div id="toastContainer"></div>
+<div id="offlineBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9998;background:var(--warning);color:#fff;text-align:center;padding:8px;font-weight:600;font-size:.85rem">
+  ⚠️ ฐานข้อมูลไม่พร้อมใช้งาน — ใช้โหมด Demo แทน — 
+  <a href="https://supabase.com/dashboard" target="_blank" style="color:#fff;text-decoration:underline">เปิดใช้ Supabase Project</a>
+  <button onclick="document.getElementById('offlineBanner').style.display='none'" style="margin-left:12px;background:rgba(255,255,255,.3);border:none;color:#fff;padding:2px 10px;border-radius:4px;cursor:pointer;font-weight:700">✕</button>
+</div>
 <button class="mobile-toggle" onclick="toggleSidebar()">☰</button>
 
 <div class="app-container">
@@ -373,6 +378,18 @@ document.addEventListener('DOMContentLoaded',function(){
   APP.CURRENT_PAGE=p.get('page')||'login';
   var saved=localStorage.getItem('app_user');
   if(saved){try{APP.USER=JSON.parse(saved);APP.CURRENT_PAGE='landing'}catch(e){}}
+
+  // Auto-demo mode: if no saved user, check Supabase and auto-login as demo
+  if(!saved){
+    isSupabaseReachable().then(function(ok){
+      if(!ok){
+        // Supabase is down — auto-enter demo mode
+        skipLogin();
+        document.getElementById('offlineBanner').style.display='block';
+      }
+    });
+  }
+
   initApp();
   addCartRow();
   checkLowStock();
@@ -458,16 +475,7 @@ function installPWA(){
 // ═══════════════════════════════════════
 // API HELPERS
 // ═══════════════════════════════════════
-// ═══════════════════════════════════════
-// xr — flexible fetch wrapper (injectable requestor)
-//   xr(null)  → native fetch
-//   xr(myFunc) → custom requestor
-// ═══════════════════════════════════════
-var xr = function(e) {
-  return e
-    ? function() { return e.apply(null, arguments) }
-    : function() { return fetch.apply(null, arguments) };
-};
+let xr = e => e ? (...t) => e(...t) : (...e) => fetch(...e);
 
 function postApi(url, body, cb, errCb) {
   showLoading(true);
